@@ -4,6 +4,7 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 # 초기 설정 함수
@@ -19,20 +20,57 @@ setup_environment() {
     mkdir -p ~/db_tapestore
 }
 
+# 마이너 상태 정보 가져오기
+get_miner_stats() {
+    local miner_address=$1
+    local stats=$(tapedrive status "$miner_address" 2>/dev/null)
+    echo "$stats"
+}
+
 # 대시보드 함수
 show_dashboard() {
     clear
     echo -e "${GREEN}=== Tapedrive 마이너 대시보드 ===${NC}"
     echo -e "${YELLOW}실행 중인 마이너 수: $1${NC}"
+    echo -e "${BLUE}시스템 시간: $(date '+%Y-%m-%d %H:%M:%S')${NC}"
     echo "----------------------------------------"
+    
     for ((i=1; i<=$1; i++)); do
         if ps -p ${PIDS[$i]} > /dev/null; then
-            echo -e "${GREEN}마이너 #$i (${MINER_NAMES[$i]}): 실행 중${NC}"
+            echo -e "${GREEN}마이너 #$i (${MINER_NAMES[$i]})${NC}"
+            echo -e "  주소: ${MINER_ADDRESSES[$i]}"
+            
+            # 마이너 상태 정보 가져오기
+            stats=$(get_miner_stats "${MINER_ADDRESSES[$i]}")
+            if [ ! -z "$stats" ]; then
+                echo -e "  상태: $stats"
+            else
+                echo -e "  상태: 정보 수집 중..."
+            fi
+            
+            # 마지막 데이터 등록 시간 표시
+            if [ -f "miner_${i}_last_write.txt" ]; then
+                last_write=$(cat "miner_${i}_last_write.txt")
+                echo -e "  마지막 데이터 등록: $last_write"
+            fi
+            
+            # CPU 사용량 표시
+            cpu_usage=$(ps -p ${PIDS[$i]} -o %cpu= 2>/dev/null)
+            if [ ! -z "$cpu_usage" ]; then
+                echo -e "  CPU 사용량: ${cpu_usage}%"
+            fi
+            
+            # 메모리 사용량 표시
+            mem_usage=$(ps -p ${PIDS[$i]} -o %mem= 2>/dev/null)
+            if [ ! -z "$mem_usage" ]; then
+                echo -e "  메모리 사용량: ${mem_usage}%"
+            fi
         else
             echo -e "${RED}마이너 #$i (${MINER_NAMES[$i]}): 중지됨${NC}"
         fi
+        echo "----------------------------------------"
     done
-    echo "----------------------------------------"
+    
     echo -e "${YELLOW}종료하려면 Ctrl+C를 누르세요${NC}"
 }
 
@@ -45,6 +83,8 @@ write_tapedrive() {
         sleep_time=$((RANDOM % 300 + 300))
         sleep $sleep_time
         tapedrive write -m "hello world!"
+        # 마지막 데이터 등록 시간 저장
+        date '+%Y-%m-%d %H:%M:%S' > "miner_${miner_num}_last_write.txt"
         echo "[마이너 #$miner_num] tapedrive 데이터 등록 완료"
     done
 }
