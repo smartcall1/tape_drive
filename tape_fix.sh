@@ -56,6 +56,11 @@ create_keypair_dir() {
         handle_error "키페어 디렉토리 생성 실패: $keypair_dir"
     fi
     
+    # 기존 키페어 파일이 있다면 백업
+    if [ -f "${keypair_dir}/id.json" ]; then
+        mv "${keypair_dir}/id.json" "${keypair_dir}/id.json.bak"
+    fi
+    
     echo "$keypair_dir"
 }
 
@@ -69,15 +74,23 @@ register_miner() {
     export SOLANA_CONFIG_FILE="${keypair_dir}/config.yml"
     
     # config.yml 파일 생성
-    echo "keypair_path: ${keypair_dir}/id.json" > "$SOLANA_CONFIG_FILE"
+    cat > "$SOLANA_CONFIG_FILE" << EOF
+json_rpc_url: "https://api.devnet.solana.com"
+keypair_path: "${keypair_dir}/id.json"
+EOF
     
     # 마이너 등록
     echo -e "${YELLOW}마이너 #$miner_num ($miner_name) 등록 중...${NC}"
-    ./tapedrive register "$miner_name"
+    
+    # 자동으로 'yes' 응답
+    echo "yes" | ./tapedrive register "$miner_name"
     
     # 등록 결과 확인
     if [ $? -ne 0 ]; then
-        handle_error "마이너 등록 실패: $miner_name"
+        echo -e "${RED}마이너 등록 실패. devnet SOL이 필요합니다.${NC}"
+        echo -e "${YELLOW}https://faucet.solana.com/ 에서 SOL을 충전해주세요.${NC}"
+        echo -e "${YELLOW}충전 후 스크립트를 다시 실행해주세요.${NC}"
+        exit 1
     fi
 }
 
@@ -195,7 +208,6 @@ for ((i=1; i<=$miner_count; i++)); do
     write_tapedrive $i "$miner_name" "${KEYPAIR_DIRS[$i]}" &
     
     echo -e "${GREEN}마이너 #$i가 시작되었습니다.${NC}"
-    echo -e "${YELLOW}주의: devnet SOL이 필요합니다. https://faucet.solana.com/ 에서 충전해주세요.${NC}"
     sleep 2
 done
 
